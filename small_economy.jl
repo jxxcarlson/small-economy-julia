@@ -17,6 +17,13 @@ struct Model
 end
 
 
+# Named-argument constructor with default values
+function Model(;xMax=100.0, yMax=100.0, initialBalance=10.0, numberOfAgents=100, Δm=1.0, transactionsToRun=1000, makeTransaction=makeSimpleTransaction)
+    return Model(xMax, yMax, initialBalance, numberOfAgents, Δm, transactionsToRun, makeTransaction)
+end
+
+
+
 # Define the struct for your "thing"
 mutable struct Agent
     i:: Int64
@@ -45,7 +52,7 @@ function makeSimpleTransaction(state)
     return state
 end
 
-function run(n::Int64, state::Vector{Agent})::Vector{Agent}
+function runTransactions(n::Int64, state::Vector{Agent})::Vector{Agent}
     for i in 1:n
         model.makeTransaction(state)
     end
@@ -57,31 +64,32 @@ function getBalances(agents::Vector{Agent})::Vector{Float64}
 end
 
 
+init = function (model::Model) # ::Vector{Agent}
+    # Create an array of "Agent" objects
+    state = Vector{Agent}(undef, model.numberOfAgents)  # Initialize an empty array of `Thing`
+    # Populate the array
+    for i in 1:model.numberOfAgents
+        state[i] = Agent(i, model.xMax*rand(), model.yMax*rand(),  model.initialBalance)
+    end
+    return state
+end
 
+run = function(model::Model)  # ::Vector{Agent}
+  state = init(model)
+  return runTransactions(model.transactionsToRun, state)
+end
 
+printBalances = function(state)
+    balances = sort(getBalances(state::Vector{Agent}))
+    for i in 1:model.numberOfAgents
+        println(i, ": ", balances[i])
+    end
+end
 
 
 ########### INPUT, COMPUTATION, AND OUTPUT ########### 
 
-model = Model(100.0, 100.0, 10.0, 100, 1.0, 10_000, makeSimpleTransaction)
+model = Model( makeTransaction = makeSimpleTransaction)
+state = run(model)
+printBalances(state)
 
-
-# Create an array of "Agent" objects
-state = Vector{Agent}(undef, model.numberOfAgents)  # Initialize an empty array of `Thing`
-
-
-# Populate the array
-for i in 1:model.numberOfAgents
-    state[i] = Agent(i, model.xMax*rand(), model.yMax*rand(),  model.initialBalance)
-end
-
-state = run(model.transactionsToRun, state)
-
-state 
-
-println("\nRun makeTransactions: ", model.transactionsToRun,"\n")
-
-balances = sort(getBalances(state))
-for i in 1:model.numberOfAgents
-    println(i, ": ", balances[i])
-end
