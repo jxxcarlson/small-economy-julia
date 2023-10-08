@@ -12,9 +12,10 @@ struct Model
     initialBalance::Float64
     numberOfAgents::Int64
     Δm :: Float64
+    transactionsToRun::Int64
 end
 
-model = Model(100.0, 100.0, 10.0, 4, 1.0)
+model = Model(100.0, 100.0, 10.0, 100, 1.0, 10_000)
 
 
 # Define the struct for your "thing"
@@ -30,7 +31,7 @@ state = Vector{Agent}(undef, model.numberOfAgents)  # Initialize an empty array 
 
 # Populate the array
 for i in 1:model.numberOfAgents
-    state[i] = Agent(i, model.xMax*rand(), model.yMax*rand(), rand() * model.initialBalance)
+    state[i] = Agent(i, model.xMax*rand(), model.yMax*rand(),  model.initialBalance)
 end
 
 
@@ -44,7 +45,6 @@ end
 
 function makeTransaction(state)
     i, j = distinctRandomPair()
-    println((i, j))
     agentA = state[i]
     agentB = state[j]
     if agentA.balance - model.Δm >= 0
@@ -54,7 +54,7 @@ function makeTransaction(state)
     return state
 end
 
-function run(n, state)
+function run(n::Int64, state::Vector{Agent})::Vector{Agent}
     for i in 1:n
         makeTransaction(state)
     end
@@ -67,20 +67,14 @@ end
 
 ## OUTPUT
 
-# Display the balances
-balances = getBalances(state)
-for i in 1:model.numberOfAgents
-    println(i, ": ", balances[i])
-end
-
 # state = makeTransaction(state)
-state = run(10, state)
+state = run(model.transactionsToRun, state)
 
 state 
 
-println("\nRun makeTransaction\n")
+println("\nRun makeTransactions: ", model.transactionsToRun,"\n")
 
-balances = getBalances(state)
+balances = sort(getBalances(state))
 for i in 1:model.numberOfAgents
     println(i, ": ", balances[i])
 end
