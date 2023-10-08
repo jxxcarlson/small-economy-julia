@@ -54,17 +54,33 @@ function makeTransaction(state)
     return state
 end
 
-## OUTPUT
-
-# Display the array
-for i in 1:model.numberOfAgents
-    println( state[i])
+function run(n, state)
+    for i in 1:n
+        makeTransaction(state)
+    end
+    return(state)
 end
 
-state = makeTransaction(state)
+function getBalances(agents::Vector{Agent})::Vector{Float64}
+    return map(agent -> agent.balance, agents)
+end
+
+## OUTPUT
+
+# Display the balances
+balances = getBalances(state)
+for i in 1:model.numberOfAgents
+    println(i, ": ", balances[i])
+end
+
+# state = makeTransaction(state)
+state = run(10, state)
+
+state 
 
 println("\nRun makeTransaction\n")
 
+balances = getBalances(state)
 for i in 1:model.numberOfAgents
-    println(state[i])
+    println(i, ": ", balances[i])
 end
