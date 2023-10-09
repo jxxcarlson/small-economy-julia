@@ -14,9 +14,11 @@ struct Model
     transactionsToRun::Int64
     numberOfQuantiles::Int64
     makeTransaction::Function
+    socialSecurity::Function
+    socialSecutityTaxRate::Float64
+    taxationInterval::Int64
     report::Function
     reportInterval::Int64
-
 end
 
 
@@ -27,13 +29,31 @@ function Model(;xMax=100.0
                , numberOfAgents=100
                , Δm=1.0
                , transactionsToRun=1000
-               , numberOfQuantiles = 5
+               , numberOfQuantiles=5
                , makeTransaction=makeSimpleTransaction
-               , report=standardReport
+               , socialSecurity=ubi
+               , socialSecurityTaxRate=0.10
+               , taxationInterval=1000
+               , report=briefReport
                , reportInterval=10)
-    return Model(xMax, yMax, initialBalance, numberOfAgents, Δm, transactionsToRun, numberOfQuantiles
-      , makeTransaction, report,reportInterval)
+    return Model(
+          xMax
+        , yMax
+        , initialBalance
+        , numberOfAgents
+        , Δm
+        , transactionsToRun
+        , numberOfQuantiles
+        , makeTransaction
+        , socialSecurity
+        , socialSecurityTaxRate
+        , taxationInterval
+        , report
+        , reportInterval)
+
+
 end
+
 
 
 
@@ -67,7 +87,7 @@ function makeSimpleTransaction(agents)
     return agents
 end
 
-function run(model::Model, n::  Int64)::State
+function run(model::Model, n::Int64)::State
     state = initialState(model) 
     while state.step < n
         state = nextState(model, state)
@@ -87,7 +107,13 @@ function initialState(model::Model)::State
     return State(0, agents)
 end
 
-    
+######################################################
+
+
+function ubi(state::State, model::Model)::State
+   newState = state
+   return(newState)
+end
 ######################################################
 
 function distinctRandomPair()
@@ -233,7 +259,7 @@ function gini_index(data::Vector{Float64})
 end
 
 
-function standardReport(state::State)
+function standardReport(state::State, model)
     numberOfAngentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
     totalWealth = model.initialBalance * model.numberOfAgents
     
@@ -373,7 +399,7 @@ end
 
 function runN(model)
     state = runN_(model)
-    model.report(state)
+    model.report(state, model)
 end
 
 
@@ -381,8 +407,8 @@ end
 #                 INPUT, COMPUTATION, AND OUTPUT
 ############ ############ ############ ############ ############ 
 
-
-model = Model(numberOfAgents = 200
+model = Model(
+    numberOfAgents = 200
     , Δm = 1.0
     , initialBalance = 10
     , transactionsToRun = 1_000_000
