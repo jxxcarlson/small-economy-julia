@@ -2,7 +2,6 @@
 small_economy:
 - Julia version: 
 - Author: carlson
-- Date: 2023-10-08
 =#
 
 
@@ -16,6 +15,7 @@ struct Model
     numberOfQuantiles::Int64
     makeTransaction::Function
     report::Function
+    reportInterval::Int64
 
 end
 
@@ -29,8 +29,10 @@ function Model(;xMax=100.0
                , transactionsToRun=1000
                , numberOfQuantiles = 5
                , makeTransaction=makeSimpleTransaction
-               , report=standardReport)
-    return Model(xMax, yMax, initialBalance, numberOfAgents, Δm, transactionsToRun, numberOfQuantiles, makeTransaction, report)
+               , report=standardReport
+               , reportInterval=10)
+    return Model(xMax, yMax, initialBalance, numberOfAgents, Δm, transactionsToRun, numberOfQuantiles
+      , makeTransaction, report,reportInterval)
 end
 
 
@@ -48,6 +50,45 @@ mutable struct State
     agents::Vector{Agent}
 end
 
+function nextState(model::Model, state::State)::State
+    new_step = state.step + 1
+    new_agents = model.makeTransaction(state.agents)
+    return State(new_step, new_agents)
+end
+
+function makeSimpleTransaction(agents)
+    i, j = distinctRandomPair()
+    agentA = agents[i]
+    agentB = agents[j]
+    if agentA.balance - model.Δm >= 0
+        agentA.balance -= model.Δm
+        agentB.balance += model.Δm
+    end
+    return agents
+end
+
+function run(model::Model, n::  Int64)::State
+    state = initialState(model) 
+    while state.step < n
+        state = nextState(model, state)
+        if state.step %  model.reportInterval  == 0  
+           model.report(state, model)
+        end
+
+    end
+    return(state)
+end
+
+function initialState(model::Model)::State
+    agents = Vector{Agent}(undef, model.numberOfAgents)
+    for i in 1:model.numberOfAgents
+        agents[i] = Agent(i, model.xMax*rand(), model.yMax*rand(), model.initialBalance)
+    end
+    return State(0, agents)
+end
+
+    
+######################################################
 
 function distinctRandomPair()
     (i,j) = rand(1:model.numberOfAgents, 2)
@@ -57,16 +98,6 @@ function distinctRandomPair()
     return (i,j)
 end
 
-function makeSimpleTransaction(state)
-    i, j = distinctRandomPair()
-    agentA = state[i]
-    agentB = state[j]
-    if agentA.balance - model.Δm >= 0
-        agentA.balance -= model.Δm
-        agentB.balance += model.Δm
-    end
-    return state
-end
 
 function runTransactions(n::Int64, state::Vector{Agent})::Vector{Agent}
     for i in 1:n
@@ -78,6 +109,7 @@ end
 function getBalances(agents::Vector{Agent})::Vector{Float64}
     return map(agent -> agent.balance, agents)
 end
+
 
 
 init = function (model::Model) # ::Vector{Agent}
@@ -201,7 +233,7 @@ function gini_index(data::Vector{Float64})
 end
 
 
-function standardReport(state)
+function standardReport(state::State)
     numberOfAngentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
     totalWealth = model.initialBalance * model.numberOfAgents
     
@@ -210,8 +242,8 @@ function standardReport(state)
     println("\n")
     printModel(model)
 
-    modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state))
-    averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state))
+    modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state.agents))
+    averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state.agents))
     fractionalWealthByQuantile = (x -> x/Float64(totalWealth)).(averageByQuantile*numberOfAngentsPerQuantile)
 
 
@@ -249,7 +281,7 @@ function standardReport(state)
  
 end
 
-function briefReport(state)
+function briefReport(state, model)
     numberOfAngentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
     totalWealth = model.initialBalance * model.numberOfAgents
     
@@ -258,8 +290,8 @@ function briefReport(state)
     println("\n")
     printModel(model)
 
-    modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state))
-    averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state))
+    modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state.agents))
+    averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state.agents))
     fractionalWealthByQuantile = (x -> x/Float64(totalWealth)).(averageByQuantile*numberOfAngentsPerQuantile)
 
   
@@ -286,6 +318,59 @@ function briefReport(state)
  
 end
 
+function onelineReport(state::State, model::Model)
+    ## global model  # Declare model if it is a global variable
+    
+    numberOfAgentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
+    totalWealth = model.initialBalance * model.numberOfAgents
+
+    modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state.agents))
+    averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state.agents))
+    fractionalWealthByQuantile = (x -> x / Float64(totalWealth)).(averageByQuantile * numberOfAgentsPerQuantile)
+
+    ratios = successiveRatios(reverse(averageByQuantile))
+
+    gini = gini_index(averageByQuantile)
+    entropy = wealth_entropy(averageByQuantile)
+
+    if state.step % model.reportInterval == 0
+            println(
+            state.step,
+            ": gini: ", 
+            round(gini, digits = 2), 
+            ", entropy: ", 
+            round(entropy, digits = 2),
+            ", hi/lo: ", round(hilo(identity(averageByQuantile))))
+            # ", quintiles: ", (x -> round(x, digits=2)).(reverse(averageByQuantile)))
+    end
+end
+
+function hilo(list::Vector{Float64})
+    n = length(list)
+    if n < 2  # To avoid division by zero or index out-of-bounds
+        return 0.0
+    end
+    ratio = list[n] / list[1]
+    # println(list[n], ", ", list[1])
+    return round(ratio, digits=4)
+end
+
+function report_state(state, model)
+    if state.step % model.reportInterval == 0
+        gini = compute_gini(state)  # Assume you have a function to compute this
+        entropy = compute_entropy(state)  # Assume you have a function to compute this
+
+        println(
+            state.step, 
+            ": gini: ", 
+            round(gini, digits = 2), 
+            ", entropy: ", 
+            round(entropy, digits = 2)
+        )
+    end
+end
+
+
 function runN(model)
     state = runN_(model)
     model.report(state)
@@ -296,28 +381,18 @@ end
 #                 INPUT, COMPUTATION, AND OUTPUT
 ############ ############ ############ ############ ############ 
 
-# # struct Model
-# #     xMax::Float64
-# #     yMax::Float64
-# #     initialBalance::Float64
-# #     numberOfAgents::Int64
-# #     Δm :: Float64
-# #     transactionsToRun::Int64
-# #     makeTransaction::Function
-# # end
+
+model = Model(numberOfAgents = 200
+    , Δm = 1.0
+    , initialBalance = 10
+    , transactionsToRun = 1_000_000
+    , numberOfQuantiles = 5
+    , makeTransaction = makeSimpleTransaction
+    , report = onelineReport #  report_state # briefReport# onelineReport
+    , reportInterval = 1000
+    )
 
 
-model = Model( numberOfAgents = 10_000
-             , Δm = 1.0
-             , initialBalance = 100
-             , transactionsToRun = 1_000
-             , numberOfQuantiles = 100
-             , makeTransaction = makeSimpleTransaction
-             , report = briefReport)
-          
+# runN(model)
 
-runN(model)
-
-
-
-
+run(model, 100_000)
