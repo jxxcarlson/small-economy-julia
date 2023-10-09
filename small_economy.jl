@@ -43,6 +43,11 @@ mutable struct Agent
     balance::Float64
 end
 
+mutable struct State 
+    step::Int64
+    agents::Vector{Agent}
+end
+
 
 function distinctRandomPair()
     (i,j) = rand(1:model.numberOfAgents, 2)
