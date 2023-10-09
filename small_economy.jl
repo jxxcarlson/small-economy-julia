@@ -278,7 +278,35 @@ function gini_index(data::Vector{Float64})
     return gini
 end
 
-##### REPORTS ####
+##### EXPONENTIAL DISTRIBUTIN ESTIMATORS #####
+
+
+function differences(data::Vector{Float64})::Vector{Float64}
+    n = length(data) - 1
+    output = Vector{Float64}(undef, n)
+    for i in 1:n
+        output[i] = data[i+1] - data[i]
+    end
+    return(output)
+end
+
+function k_estimator(data::Vector{Float64})::Float64
+    log_data = log.(data)
+    diffs = differences(log_data)
+    return(average(diffs))
+end
+
+function k_estimator2(data::Vector{Float64})::Float64
+    return(1/average(data))
+end
+
+function k_estimator3(data::Vector{Float64})::Float64
+    n = length(data)
+    return((n - 1)/(n * average(data)))
+end
+
+
+##### REPORTS #####
 
 function standardReport(state::State, model)
     numberOfAngentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
