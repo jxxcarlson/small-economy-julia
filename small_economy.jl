@@ -16,12 +16,20 @@ struct Model
     numberOfQuantiles::Int64
     makeTransaction::Function
     report::Function
+
 end
 
 
 # Named-argument constructor with default values
-function Model(;xMax=100.0, yMax=100.0, initialBalance=10.0, numberOfAgents=100, Δm=1.0, transactionsToRun=1000,
-    numberOfQuantiles = 5, makeTransaction=makeSimpleTransaction, report=standardReport)
+function Model(;xMax=100.0
+               , yMax=100.0
+               , initialBalance=10.0
+               , numberOfAgents=100
+               , Δm=1.0
+               , transactionsToRun=1000
+               , numberOfQuantiles = 5
+               , makeTransaction=makeSimpleTransaction
+               , report=standardReport)
     return Model(xMax, yMax, initialBalance, numberOfAgents, Δm, transactionsToRun, numberOfQuantiles, makeTransaction, report)
 end
 
@@ -236,6 +244,43 @@ function standardReport(state)
  
 end
 
+function briefReport(state)
+    numberOfAngentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
+    totalWealth = model.initialBalance * model.numberOfAgents
+    
+
+
+    println("\n")
+    printModel(model)
+
+    modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state))
+    averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state))
+    fractionalWealthByQuantile = (x -> x/Float64(totalWealth)).(averageByQuantile*numberOfAngentsPerQuantile)
+
+  
+    gini = gini_index(averageByQuantile)
+    entropy = wealth_entropy(averageByQuantile)
+    println("\nGini index: ", round(gini, digits = 2), "  Entropy: ", round(entropy, digits = 2))
+
+ 
+
+    println("\nFit with Boltzmann-Gibbs distribution:")
+    ratios = successiveRatios(reverse(averageByQuantile))
+    println("Mean of ratios: ", round(average(ratios), digits = 2))
+    println("Standard deviation of ratios: ", round(stdev(ratios), digits = 2))
+
+    println("\nAdjusted fit with Boltzmann-Gibbs distribution:")
+    filteredAverages = filter(x -> x >= 0.5, averageByQuantile)
+    println("Quantiles dropped: ", length(averageByQuantile) - length(filteredAverages))
+    filteredRatios = successiveRatios(reverse(filteredAverages))
+    println("Mean of ratios: ", round(average(filteredRatios), digits = 2))
+    println("Standard deviation of ratios: ", round(stdev(filteredRatios), digits = 2))
+
+
+    println("\n")
+ 
+end
+
 function runN(model)
     state = runN_(model)
     model.report(state)
@@ -257,8 +302,14 @@ end
 # # end
 
 
-model = Model( numberOfAgents = 10_000, Δm = 1.0, initialBalance = 100, transactionsToRun = 1_000_000, 
-   numberOfQuantiles = 100, makeTransaction = makeSimpleTransaction)
+model = Model( numberOfAgents = 10_000
+             , Δm = 1.0
+             , initialBalance = 100
+             , transactionsToRun = 1_000
+             , numberOfQuantiles = 100
+             , makeTransaction = makeSimpleTransaction
+             , report = briefReport)
+          
 
 runN(model)
 
