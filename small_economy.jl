@@ -13,13 +13,15 @@ struct Model
     numberOfAgents::Int64
     Δm :: Float64
     transactionsToRun::Int64
+    numberOfQuantiles::Int64
     makeTransaction::Function
 end
 
 
 # Named-argument constructor with default values
-function Model(;xMax=100.0, yMax=100.0, initialBalance=10.0, numberOfAgents=100, Δm=1.0, transactionsToRun=1000, makeTransaction=makeSimpleTransaction)
-    return Model(xMax, yMax, initialBalance, numberOfAgents, Δm, transactionsToRun, makeTransaction)
+function Model(;xMax=100.0, yMax=100.0, initialBalance=10.0, numberOfAgents=100, Δm=1.0, transactionsToRun=1000,
+    numberOfQuantiles = 5, makeTransaction=makeSimpleTransaction)
+    return Model(xMax, yMax, initialBalance, numberOfAgents, Δm, transactionsToRun, numberOfQuantiles, makeTransaction)
 end
 
 
@@ -86,10 +88,109 @@ printBalances = function(state)
     end
 end
 
+# quantiles = function(numberOfQuantiles::Int32, data::Vector{Float})::Vector{Int}
+function quantiles(numberOfQuantiles::Int, data::Vector{Float64})
+    sorted_data = sort(data)
+    output = Vector{Vector{Float64}}(undef, numberOfQuantiles)
+    n = length(sorted_data)
+    Δn = Int(floor(n / numberOfQuantiles))
 
-########### INPUT, COMPUTATION, AND OUTPUT ########### 
+    for i = 1:(numberOfQuantiles - 1)
+        first = (i - 1) * Δn + 1
+        last = i * Δn
+        output[i] = sorted_data[first:last]
+    end
 
-model = Model( makeTransaction = makeSimpleTransaction)
+    # Handle the last quantile
+    output[numberOfQuantiles] = sorted_data[((numberOfQuantiles - 1) * Δn + 1):end]
+
+    return output
+end
+    
+function average(data::Vector{Float64})::Float64
+    n = length(data)
+    return (sum(data)/n)
+end
+
+function variance(data::VecElement{Float64})::Float64
+    mean = average(data)
+    normalizedData = (\x -> x - mean).(data)
+    return(normaizedData)
+end
+
+    
+function quantileAverages(numberOfQuantiles::Int, data::Vector{Float64})
+    return(average.(quantiles(numberOfQuantiles, data)))
+end
+
+
+
+
+function printModel(model)
+    println("Initial per capita balance   : ", model.initialBalance)
+    println("Number of agents:            : ", model.numberOfAgents)
+    println("Inital per capita balance    : ", model.initialBalance)
+    println("Amount of transaction        : ", model.Δm)
+    println("transactionsToRun (millions) : ", model.transactionsToRun/1000_000)
+
+end
+
+function successiveRatios(data::Vector{Float64})
+    n = length(data)
+    ratios = Vector{Float64}(undef, n - 1)
+    for i = 1:(n - 1)
+        # ratios[i] = data[i+1] / data[i]
+        ratios[i] = data[i] / data[i+1]
+    end
+    return ratios
+end
+    
+############ ############ ############ ############ ############ 
+#                 INPUT, COMPUTATION, AND OUTPUT
+############ ############ ############ ############ ############ 
+
+# # struct Model
+# #     xMax::Float64
+# #     yMax::Float64
+# #     initialBalance::Float64
+# #     numberOfAgents::Int64
+# #     Δm :: Float64
+# #     transactionsToRun::Int64
+# #     makeTransaction::Function
+# # end
+
+
+model = Model( numberOfAgents = 1000, Δm = 1.0, initialBalance = 1000, transactionsToRun = 1_000_000_000, 
+   numberOfQuantiles = 10                                                                                                                             0, makeTransaction = makeSimpleTransaction)
 state = run(model)
-printBalances(state)
+# printBalances(state)
+
+modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state))
+averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state))
+
+# for i = 1:10
+#     println(i, ": ", length(modelQuantiles[i]), ": ", modelQuantiles[i])
+# end
+
+println("\n")
+
+printModel(model)
+
+println("\n")
+
+println("Money by percentile:")
+
+for i = 1:model.numberOfQuantiles
+    println(model.numberOfQuantiles + 1 - i, ": ", round(averageByQuantile[model.numberOfQuantiles + 1 - i], digits = 2))
+end
+
+println("\n")
+
+
+ratios = successiveRatios(reverse(averageByQuantile))
+
+println("Inter percentile ratios:")
+for i = 1:model.numberOfQuantiles - 1 
+    println(i, ": ", round(ratios[i], digits=2))
+end
 
