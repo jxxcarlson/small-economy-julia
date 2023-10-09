@@ -15,7 +15,7 @@ struct Model
     numberOfQuantiles::Int64
     makeTransaction::Function
     socialSecurity::Function
-    socialSecutityTaxRate::Float64
+    socialSecurityTaxRate::Float64
     taxationInterval::Int64
     report::Function
     reportInterval::Int64
@@ -31,8 +31,8 @@ function Model(;xMax=100.0
                , transactionsToRun=1000
                , numberOfQuantiles=5
                , makeTransaction=makeSimpleTransaction
-               , socialSecurity=ubi
-               , socialSecurityTaxRate=0.10
+               , socialSecurity=standardSocialSecurity
+               , socialSecurityTaxRate=0.0
                , taxationInterval=1000
                , report=briefReport
                , reportInterval=10)
@@ -59,10 +59,10 @@ end
 
 # Define the struct for your "thing"
 mutable struct Agent
-    i:: Int64
-    x::Float64
-    y::Float64
-    balance::Float64
+i:: Int64
+x::Float64
+y::Float64
+balance::Float64
 end
 
 mutable struct State 
@@ -73,7 +73,30 @@ end
 function nextState(model::Model, state::State)::State
     new_step = state.step + 1
     new_agents = model.makeTransaction(state.agents)
-    return State(new_step, new_agents)
+    if model.socialSecurityTaxRate > 0 && new_step % model.taxationInterval == 0
+        new_agents2 = model.socialSecurity(model, new_agents)
+    else
+        new_agents2 = new_agents
+    end
+    return State(new_step, new_agents2)
+end
+
+function standardSocialSecurity(model::Model, agents::Vector{Agent})
+    revenue = sum((agent -> model.socialSecurityTaxRate * agent.balance).(agents))
+    payment = revenue/model.numberOfAgents
+    new_agents = (agent -> updateAgent!(agent, payment, model.socialSecurityTaxRate)).(agents)
+    return(new_agents)
+end
+
+function updateAgent!(agent::Agent, payment::Float64, taxRate::Float64)::Agent
+    newBalance = agent.balance - agent.balance * taxRate + payment
+    newAgent = update_balance!(agent, newBalance)
+    return(newAgent)
+end
+
+function update_balance!(agent::Agent, new_balance::Float64)
+    agent.balance = new_balance
+    return(agent)
 end
 
 function makeSimpleTransaction(agents)
@@ -414,11 +437,12 @@ model = Model(
     , transactionsToRun = 1_000_000
     , numberOfQuantiles = 5
     , makeTransaction = makeSimpleTransaction
+    , socialSecurityTaxRate = 0.01
     , report = onelineReport #  report_state # briefReport# onelineReport
     , reportInterval = 1000
     )
 
 
-# runN(model)
+runN(model)
 
-run(model, 100_000)
+# run(model, 100_000)
