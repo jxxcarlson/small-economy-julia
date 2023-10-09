@@ -55,9 +55,6 @@ function Model(;xMax=100.0
 end
 
 
-
-
-# Define the struct for your "thing"
 mutable struct Agent
 i:: Int64
 x::Float64
@@ -281,12 +278,11 @@ function gini_index(data::Vector{Float64})
     return gini
 end
 
+##### REPORTS ####
 
 function standardReport(state::State, model)
     numberOfAngentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
     totalWealth = model.initialBalance * model.numberOfAgents
-    
-
 
     println("\n")
     printModel(model)
@@ -294,7 +290,6 @@ function standardReport(state::State, model)
     modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state.agents))
     averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state.agents))
     fractionalWealthByQuantile = (x -> x/Float64(totalWealth)).(averageByQuantile*numberOfAngentsPerQuantile)
-
 
     println("\nTotal wealth: ", totalWealth)
     println("\nnumberOfAngentsPerQuantile: ", numberOfAngentsPerQuantile)
@@ -313,7 +308,6 @@ function standardReport(state::State, model)
     entropy = wealth_entropy(averageByQuantile)
     println("Entropy: ", round(entropy, digits = 2))
 
- 
     println("\nExamine fit with Boltzmann-Gibbs distribution:")
     ratios = successiveRatios(reverse(averageByQuantile))
     println("Inter percentile ratios:")
@@ -333,8 +327,6 @@ end
 function briefReport(state, model)
     numberOfAngentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
     totalWealth = model.initialBalance * model.numberOfAgents
-    
-
 
     println("\n")
     printModel(model)
@@ -342,13 +334,10 @@ function briefReport(state, model)
     modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state.agents))
     averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state.agents))
     fractionalWealthByQuantile = (x -> x/Float64(totalWealth)).(averageByQuantile*numberOfAngentsPerQuantile)
-
   
     gini = gini_index(averageByQuantile)
     entropy = wealth_entropy(averageByQuantile)
     println("\nGini index: ", round(gini, digits = 2), "  Entropy: ", round(entropy, digits = 2))
-
- 
 
     println("\nFit with Boltzmann-Gibbs distribution:")
     ratios = successiveRatios(reverse(averageByQuantile))
@@ -364,8 +353,8 @@ function briefReport(state, model)
 
 
     println("\n")
- 
 end
+
 
 function onelineReport(state::State, model::Model)
     ## global model  # Declare model if it is a global variable
@@ -438,11 +427,11 @@ model = Model(
     , numberOfQuantiles = 5
     , makeTransaction = makeSimpleTransaction
     , socialSecurityTaxRate = 0.01
-    , report = onelineReport #  report_state # briefReport# onelineReport
+    , report = onelineReport #  standardReport # briefReport # onelineReport
     , reportInterval = 1000
     )
 
 
-runN(model)
+# runN(model)
 
-# run(model, 100_000)
+run(model, 100_000)
