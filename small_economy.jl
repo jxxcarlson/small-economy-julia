@@ -112,13 +112,25 @@ function average(data::Vector{Float64})::Float64
     return (sum(data)/n)
 end
 
-function variance(data::VecElement{Float64})::Float64
+
+function normalize(data::Vector{Float64})::Vector{Float64}
     mean = average(data)
-    normalizedData = (\x -> x - mean).(data)
-    return(normaizedData)
+    normalizedData = (x -> x - mean).(data)
+    return(normalizedData)
 end
 
-    
+function variance(data::Vector{Float64})::Float64
+    normalized = normalize(data)
+    squares = (x -> x^2).(normalized)
+    numerator = sum(squares)
+    denominator = length(squares)
+    return(numerator/denominator)
+end
+
+function stdev(data::Vector{Float64})::Float64
+    return(sqrt(variance(data)))
+end
+
 function quantileAverages(numberOfQuantiles::Int, data::Vector{Float64})
     return(average.(quantiles(numberOfQuantiles, data)))
 end
@@ -144,7 +156,38 @@ function successiveRatios(data::Vector{Float64})
     end
     return ratios
 end
+
+function report(state)
+    println("\n")
+    printModel(model)
+
+    modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state))
+    averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state))
+ 
+    println("Money by percentile:")
+
+    for i = 1:model.numberOfQuantiles
+        println(model.numberOfQuantiles + 1 - i, ": ", round(averageByQuantile[model.numberOfQuantiles + 1 - i], digits = 2))
+    end
+
+    println("\n")
+
+    ratios = successiveRatios(reverse(averageByQuantile))
+
+    println("Inter percentile ratios:")
+    for i = 1:model.numberOfQuantiles - 1 
+        println(i, ": ", round(ratios[i], digits=2))
+    end
     
+    println("\n")
+
+    println("Mean of ratios: ", round(average(ratios), digits = 2))
+    println("Standard deviation of ratios: ", round(stdev(ratios), digits = 2))
+
+    println("\n")
+ 
+end
+
 ############ ############ ############ ############ ############ 
 #                 INPUT, COMPUTATION, AND OUTPUT
 ############ ############ ############ ############ ############ 
@@ -160,37 +203,14 @@ end
 # # end
 
 
-model = Model( numberOfAgents = 1000, Δm = 1.0, initialBalance = 1000, transactionsToRun = 1_000_000_000, 
-   numberOfQuantiles = 10                                                                                                                             0, makeTransaction = makeSimpleTransaction)
+model = Model( numberOfAgents = 1000, Δm = 1.0, initialBalance = 1000, transactionsToRun = 10_000_000, 
+   numberOfQuantiles = 10, makeTransaction = makeSimpleTransaction)
+
 state = run(model)
 # printBalances(state)
 
-modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state))
-averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state))
-
-# for i = 1:10
-#     println(i, ": ", length(modelQuantiles[i]), ": ", modelQuantiles[i])
-# end
-
-println("\n")
-
-printModel(model)
-
-println("\n")
-
-println("Money by percentile:")
-
-for i = 1:model.numberOfQuantiles
-    println(model.numberOfQuantiles + 1 - i, ": ", round(averageByQuantile[model.numberOfQuantiles + 1 - i], digits = 2))
-end
-
-println("\n")
+report(state)
 
 
-ratios = successiveRatios(reverse(averageByQuantile))
 
-println("Inter percentile ratios:")
-for i = 1:model.numberOfQuantiles - 1 
-    println(i, ": ", round(ratios[i], digits=2))
-end
 
