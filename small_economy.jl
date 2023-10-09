@@ -15,13 +15,14 @@ struct Model
     transactionsToRun::Int64
     numberOfQuantiles::Int64
     makeTransaction::Function
+    report::Function
 end
 
 
 # Named-argument constructor with default values
 function Model(;xMax=100.0, yMax=100.0, initialBalance=10.0, numberOfAgents=100, Δm=1.0, transactionsToRun=1000,
-    numberOfQuantiles = 5, makeTransaction=makeSimpleTransaction)
-    return Model(xMax, yMax, initialBalance, numberOfAgents, Δm, transactionsToRun, numberOfQuantiles, makeTransaction)
+    numberOfQuantiles = 5, makeTransaction=makeSimpleTransaction, report=standardReport)
+    return Model(xMax, yMax, initialBalance, numberOfAgents, Δm, transactionsToRun, numberOfQuantiles, makeTransaction, report)
 end
 
 
@@ -76,7 +77,7 @@ init = function (model::Model) # ::Vector{Agent}
     return state
 end
 
-run = function(model::Model)  # ::Vector{Agent}
+runN_ = function(model::Model)  # ::Vector{Agent}
   state = init(model)
   return runTransactions(model.transactionsToRun, state)
 end
@@ -113,14 +114,14 @@ function average(data::Vector{Float64})::Float64
 end
 
 
-function normalize(data::Vector{Float64})::Vector{Float64}
+function normalizeData(data::Vector{Float64})::Vector{Float64}
     mean = average(data)
     normalizedData = (x -> x - mean).(data)
     return(normalizedData)
 end
 
 function variance(data::Vector{Float64})::Float64
-    normalized = normalize(data)
+    normalized = normalizeData(data)
     squares = (x -> x^2).(normalized)
     numerator = sum(squares)
     denominator = length(squares)
@@ -143,7 +144,7 @@ function printModel(model)
     println("Number of agents:            : ", model.numberOfAgents)
     println("Inital per capita balance    : ", model.initialBalance)
     println("Amount of transaction        : ", model.Δm)
-    println("transactionsToRun (millions) : ", model.transactionsToRun/1000_000)
+    println("transactionsToRun (millions) : ", model.transactionsToRun / 1_000_000)
 
 end
 
@@ -157,23 +158,70 @@ function successiveRatios(data::Vector{Float64})
     return ratios
 end
 
-function report(state)
+using LinearAlgebra  # for the `norm` function
+
+function wealth_entropy(quantiles::Vector{Float64})
+    total_wealth = sum(quantiles)
+    
+    # Calculate "probabilities" (shares of total wealth)
+    p = quantiles ./ total_wealth
+    
+    # Calculate entropy
+    entropy = -sum(p .* log2.(p .+ eps()))  # eps() is added to handle log(0)
+    
+    return entropy
+end
+
+function gini_index(data::Vector{Float64})
+    n = length(data)
+    mean_value = average(data)
+    
+    sum_diff = 0.0
+    for i in 1:n
+        for j in 1:n
+            sum_diff += abs(data[i] - data[j])
+        end
+    end
+    
+    gini = sum_diff / (2 * n^2 * mean_value)
+    return gini
+end
+
+
+function standardReport(state)
+    numberOfAngentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
+    totalWealth = model.initialBalance * model.numberOfAgents
+    
+
+
     println("\n")
     printModel(model)
 
     modelQuantiles = quantiles(model.numberOfQuantiles, getBalances(state))
     averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state))
- 
-    println("Money by percentile:")
+    fractionalWealthByQuantile = (x -> x/Float64(totalWealth)).(averageByQuantile*numberOfAngentsPerQuantile)
+
+
+    println("\nTotal wealth: ", totalWealth)
+    println("\nnumberOfAngentsPerQuantile: ", numberOfAngentsPerQuantile)
+    println("\nMoney by percentile:")
 
     for i = 1:model.numberOfQuantiles
-        println(model.numberOfQuantiles + 1 - i, ": ", round(averageByQuantile[model.numberOfQuantiles + 1 - i], digits = 2))
+        println(model.numberOfQuantiles + 1 - i, ": ", 
+          round(averageByQuantile[model.numberOfQuantiles + 1 - i], digits = 2), ", ",
+          round(fractionalWealthByQuantile[model.numberOfQuantiles + 1 - i], digits = 2))
     end
 
-    println("\n")
+    println("\nSum of money by percentile: " ,round(sum(averageByQuantile), digits =0), "\n")
 
+    gini = gini_index(averageByQuantile)
+    println("\nGini index: ", round(gini, digits = 2))
+    entropy = wealth_entropy(averageByQuantile)
+    println("Entropy: ", round(entropy, digits = 2))
+
+ 
+    println("\nExamine fit with Boltzmann-Gibbs distribution:")
     ratios = successiveRatios(reverse(averageByQuantile))
-
     println("Inter percentile ratios:")
     for i = 1:model.numberOfQuantiles - 1 
         println(i, ": ", round(ratios[i], digits=2))
@@ -187,6 +235,12 @@ function report(state)
     println("\n")
  
 end
+
+function runN(model)
+    state = runN_(model)
+    model.report(state)
+end
+
 
 ############ ############ ############ ############ ############ 
 #                 INPUT, COMPUTATION, AND OUTPUT
@@ -203,13 +257,10 @@ end
 # # end
 
 
-model = Model( numberOfAgents = 1000, Δm = 1.0, initialBalance = 1000, transactionsToRun = 10_000_000, 
-   numberOfQuantiles = 10, makeTransaction = makeSimpleTransaction)
+model = Model( numberOfAgents = 10_000, Δm = 1.0, initialBalance = 100, transactionsToRun = 1_000_000, 
+   numberOfQuantiles = 100, makeTransaction = makeSimpleTransaction)
 
-state = run(model)
-# printBalances(state)
-
-report(state)
+runN(model)
 
 
 
