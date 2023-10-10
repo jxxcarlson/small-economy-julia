@@ -37,7 +37,7 @@ mutable struct Model
     showEndReport::Bool
     showPlot::Bool
     verbose::Bool
-    printModel::Bool
+    printmodel::Bool
 end
 
 
@@ -58,7 +58,7 @@ function Model(;xMax=100.0
                , showEndReport=false
                , showPlot=false
                , verbose=false
-               , printModel=false)
+               , printmodel=false)
     return Model(
           xMax
         , yMax
@@ -76,7 +76,7 @@ function Model(;xMax=100.0
         , showEndReport
         , showPlot
         , verbose
-        , printModel)
+        , printmodel)
 
 
 end
@@ -146,7 +146,7 @@ function run(settings::String)
             else
                 setModel(settings)
             end
-    if model.printModel
+    if model.printmodel
         printModel(model)
     end
     state = initialState(model) 
@@ -643,11 +643,11 @@ function setShowplot!(showPlotAsString::String, model::Model)
     end
 end
 
-function setPrintModel!(sprintModel::String, model::Model)
-    if sprintModel == "true"
-        model.printModel = true
+function setPrintModel!(printmodel::String, model::Model)
+    if printmodel == "true"
+        model.printmodel = true
     else
-        model.printModel = false
+        model.printmodel = false
     end
 end
 
@@ -659,7 +659,7 @@ function_dict["agents"] = (model, numberOfAgents) -> setNumberOfAgents!(numberOf
 function_dict["transactions"] = (model, transactions) -> setTransactionsToRun!(transactions, model)
 function_dict["quantiles"] = (model, quantiles) -> setNumberOfQuantiles!(quantiles, model)
 function_dict["plot"] = (model, plot) -> setShowplot!(plot, model)
-function_dict["printModel"] = (model, printModel) -> setPrintModel!(printModel, model)
+function_dict["printmodel"] = (model, printmodel) -> setPrintModel!(printmodel, model)
 
 
 curry(f, x) = (y) -> f(x, y)
