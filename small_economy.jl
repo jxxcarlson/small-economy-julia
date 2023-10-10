@@ -4,8 +4,23 @@ small_economy:
 - Author: carlson
 =#
 
+using Plots
 
-struct Model
+######################################################
+
+### TYPES: Model, Agent, State
+
+#=
+The State data structures is for a "state machine" with 
+function
+
+    nextState(model::Model, state::State)::State
+
+=#
+
+######################################################
+
+mutable struct Model
     xMax::Float64
     yMax::Float64
     initialBalance::Float64
@@ -19,6 +34,9 @@ struct Model
     taxationInterval::Int64
     report::Function
     reportInterval::Int64
+    showEndReport::Bool
+    showPlot::Bool
+    verbose::Bool
 end
 
 
@@ -35,7 +53,10 @@ function Model(;xMax=100.0
                , socialSecurityTaxRate=0.0
                , taxationInterval=1000
                , report=briefReport
-               , reportInterval=10)
+               , reportInterval=10
+               , showEndReport=false
+               , showPlot=false
+               , verbose=false)
     return Model(
           xMax
         , yMax
@@ -49,7 +70,10 @@ function Model(;xMax=100.0
         , socialSecurityTaxRate
         , taxationInterval
         , report
-        , reportInterval)
+        , reportInterval
+        , showEndReport
+        , showPlot
+        , verbose)
 
 
 end
@@ -66,6 +90,8 @@ mutable struct State
     step::Int64
     agents::Vector{Agent}
 end
+
+### THE NEXT STATE FUNCTION AND ITS HELPERS
 
 function nextState(model::Model, state::State)::State
     new_step = state.step + 1
@@ -107,16 +133,42 @@ function makeSimpleTransaction(agents)
     return agents
 end
 
-function run(model::Model, n::Int64)::State
+######################################################
+
+### RUN THE MACHINE N TIMES
+
+function run(model::Model, n::Int64)
+    println("\nRunning for ", n/1_000_000, " million steps ... \n")
     state = initialState(model) 
+
     while state.step < n
-        state = nextState(model, state)
-        if state.step %  model.reportInterval  == 0  
-           model.report(state, model)
+        
+        if model.verbose && state.step % model.reportInterval  == 0  
+            model.report(state, model)
+        end
+        if state.step % 10_000_000 == 0
+            print("\n", Int(1 + state.step / 10_000_000), " ")
+        end
+        if state.step % 100_000 == 0
+            print(".")
+        end
+        if state.step % 1_000_000 == 0
+            print(" * ")
         end
 
+        state = nextState(model, state)
+        
     end
-    return(state)
+    print("\n")
+
+    if model.showEndReport
+        standardReport(state, model)
+    end
+    if model.showPlot 
+        plotDistribution(state, model)
+        println("\nplot saved to current directory\n")
+    end
+    # return(state)
 end
 
 function initialState(model::Model)::State
@@ -126,15 +178,6 @@ function initialState(model::Model)::State
     end
     return State(0, agents)
 end
-
-######################################################
-
-
-function ubi(state::State, model::Model)::State
-   newState = state
-   return(newState)
-end
-######################################################
 
 function distinctRandomPair()
     (i,j) = rand(1:model.numberOfAgents, 2)
@@ -157,7 +200,6 @@ function getBalances(agents::Vector{Agent})::Vector{Float64}
 end
 
 
-
 init = function (model::Model) # ::Vector{Agent}
     # Create an array of "Agent" objects
     state = Vector{Agent}(undef, model.numberOfAgents)  # Initialize an empty array of `Thing`
@@ -172,6 +214,13 @@ runN_ = function(model::Model)  # ::Vector{Agent}
   state = init(model)
   return runTransactions(model.transactionsToRun, state)
 end
+
+
+######################################################
+
+### REPORT HELPERS
+
+######################################################
 
 printBalances = function(state)
     balances = sort(getBalances(state::Vector{Agent}))
@@ -228,8 +277,6 @@ function quantileAverages(numberOfQuantiles::Int, data::Vector{Float64})
 end
 
 
-
-
 function printModel(model)
     println("Initial per capita balance   : ", model.initialBalance)
     println("Number of agents:            : ", model.numberOfAgents)
@@ -278,8 +325,8 @@ function gini_index(data::Vector{Float64})
     return gini
 end
 
-##### EXPONENTIAL DISTRIBUTIN ESTIMATORS #####
 
+##### EXPONENTIAL DISTRIBUTION ESTIMATORS #####
 
 function differences(data::Vector{Float64})::Vector{Float64}
     n = length(data) - 1
@@ -305,8 +352,73 @@ function k_estimator3(data::Vector{Float64})::Float64
     return((n - 1)/(n * average(data)))
 end
 
+######################################################
+
+##### PLOT #####
+
+######################################################
+
+function plotDistribution(state, model)
+    averageByQuantile = quantileAverages(model.numberOfQuantiles, getBalances(state.agents))
+    reversed = reverse(averageByQuantile)
+    A = reversed[1]
+    k = k_estimator3(averageByQuantile)
+    # k = k_^1.2
+    # println("k_: ", k_, ", k: ", k)
+    println("A: ", round(A, digits = 3))
+    println("k: ",round(k, digits = 3))
+
+    function expo(x)
+        return A*exp(-k*(x - 1))
+    end
+    xs = 1:length(reversed)
+    us = reversed
+    vs = expo.(xs)
+    money = "m:" * string(model.initialBalance) * ", "
+    transaction = "tr:" * string(model.Δm) * ", "
+    tax = "tx:" * string(model.socialSecurityTaxRate)  * ", "
+    population = "p:" * string(model.numberOfAgents) * ", "
+    n_agents = "n:" * transactionsToRunString(model)
+    gini_ = round(gini_index(quantileAverages(model.numberOfQuantiles, getBalances(state.agents))), digits = 2) 
+    gini = "gini:" * string(gini_) * ", "
+
+
+    titleString = "\n" * money * transaction * tax * population * gini * n_agents
+    filename_ = replace(titleString, "\n" => "")
+    filename = replace(filename_, ":" => "")
+    
+	plot(xs, [us, vs], titlefont=("Courier", 8), legend=:topright, title=titleString)
+    savefig(filename * ".png")
+	
+end
+
+function transactionsToRunString(model::Model)::String
+    if model.transactionsToRun < 1000
+        model.transactionsToRun
+    elseif model.transactionsToRun < 1_000_000
+        string(Int(model.transactionsToRun / 1000)) * " thousand"
+    else
+        string(Int(model.transactionsToRun / 1_000_000)) * " million"
+    end
+end
+
+
+function transactionsToRunStringShort(model::Model)::String
+    if model.transactionsToRun < 1000
+        model.transactionsToRun
+    elseif model.transactionsToRun <1_000_000
+        string(Int(model.transactionsToRun / 1000)) * "k"
+    else
+        string(Int(model.transactionsToRun / 1_000_000)) * "m"
+    end
+end
+   
+
+######################################################
 
 ##### REPORTS #####
+
+######################################################
 
 function standardReport(state::State, model)
     numberOfAngentsPerQuantile = model.numberOfAgents / model.numberOfQuantiles
@@ -329,7 +441,7 @@ function standardReport(state::State, model)
           round(fractionalWealthByQuantile[model.numberOfQuantiles + 1 - i], digits = 2))
     end
 
-    println("\nSum of money by percentile: " ,round(sum(averageByQuantile), digits =0), "\n")
+    println("\nSum of money by quantile: " ,round(sum(averageByQuantile), digits =0))
 
     gini = gini_index(averageByQuantile)
     println("\nGini index: ", round(gini, digits = 2))
@@ -338,7 +450,7 @@ function standardReport(state::State, model)
 
     println("\nExamine fit with Boltzmann-Gibbs distribution:")
     ratios = successiveRatios(reverse(averageByQuantile))
-    println("Inter percentile ratios:")
+    println("Inter percentile ratios:\n")
     for i = 1:model.numberOfQuantiles - 1 
         println(i, ": ", round(ratios[i], digits=2))
     end
@@ -442,24 +554,109 @@ function runN(model)
     model.report(state, model)
 end
 
+################################################################
+#                   DSL for constructing a Model
+################################################################
+
+function str_to_dict(str::String)
+    # Initialize an empty dictionary
+    d = Dict{String, String}()
+
+    # Split the string by commas to get the individual key-value pairs
+    pairs = split(str, ", ")
+
+    # Iterate through each pair and populate the dictionary
+    for pair in pairs
+        key, value = split(pair, " = ")
+        d[key] = value
+    end
+    
+    return d
+end
+
+abstract type Maybe{T} end
+
+struct Just{T} <: Maybe{T}
+    value::T
+end
+
+struct NothingMaybe <: Maybe{Nothing}
+end
+
+just(x) = Just(x)
+nothing_maybe() = NothingMaybe()
+
+function maybe_parse_int(s::String)  # Removed the type annotation
+    parsed = tryparse(Int64, s)
+    return parsed === nothing ? nothing_maybe() : just(parsed)
+end
+
+function setNumberOfAgents!(nAsString::String, model::Model)
+    result = maybe_parse_int(nAsString)
+    if isa(result, Just)
+        model.numberOfAgents = result.value
+    else
+        println("Bad format for numberOfAgents")
+    end
+end
+
+function setTransactionsToRun!(nAsString::String, model::Model)
+    result = maybe_parse_int(nAsString)
+    if isa(result, Just)
+        model.transactionsToRun = result.value
+    else
+        println("Bad format for numberOfTransactionsToRun")
+    end
+end
+
+
+# Create an empty dictionary to store functions
+function_dict = Dict{String, Function}()
+
+# Populate the dictionary with functions
+function_dict["agents"] = (model, numberOfAgentsAsString) -> setNumberOfAgents!(numberOfAgentsAsString, model)
+function_dict["transactions"] = (model, numberOfTransactionsToRun) -> setTransactionsToRun!(numberOfTransactionsToRun, model)
+
+curry(f, x) = (y) -> f(x, y)
+
+function setModel(settings::String)::Model
+    dict = str_to_dict(settings)
+    model = Model()
+    for (key, value) in dict
+        println(key, ": ", value)
+        function_dict[key](model, value)
+    end
+    return model
+end
+  
+
+# str_to_Model(str::String)::Model
+#   dict = str_to_dict(str)
+#   for key in keys(dict)
+#     if key == "initialBalance"
+
+
 
 ############ ############ ############ ############ ############ 
 #                 INPUT, COMPUTATION, AND OUTPUT
 ############ ############ ############ ############ ############ 
 
 model = Model(
-    numberOfAgents = 200
+    numberOfAgents = 1000
     , Δm = 1.0
     , initialBalance = 10
     , transactionsToRun = 1_000_000
-    , numberOfQuantiles = 5
+    , numberOfQuantiles = 100
     , makeTransaction = makeSimpleTransaction
     , socialSecurityTaxRate = 0.01
     , report = onelineReport #  standardReport # briefReport # onelineReport
     , reportInterval = 1000
+    , showEndReport=true
+    , showPlot=true
+    , verbose=false
     )
 
 
 # runN(model)
 
-run(model, 100_000)
+run(model, 1_000_000)
