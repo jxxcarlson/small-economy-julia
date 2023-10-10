@@ -95,7 +95,7 @@ end
 
 function nextState(model::Model, state::State)::State
     new_step = state.step + 1
-    new_agents = model.makeTransaction(state.agents)
+    new_agents = model.makeTransaction(model, state.agents)
     if model.socialSecurityTaxRate > 0 && new_step % model.taxationInterval == 0
         new_agents2 = model.socialSecurity(model, new_agents)
     else
@@ -122,8 +122,8 @@ function update_balance!(agent::Agent, new_balance::Float64)
     return(agent)
 end
 
-function makeSimpleTransaction(agents)
-    i, j = distinctRandomPair()
+function makeSimpleTransaction(model, agents)
+    i, j = distinctRandomPair(model)
     agentA = agents[i]
     agentB = agents[j]
     if agentA.balance - model.Δm >= 0
@@ -137,11 +137,17 @@ end
 
 ### RUN THE MACHINE N TIMES
 
-function run(model::Model, n::Int64)
-    println("\nRunning for ", n/1_000_000, " million steps ... \n")
+function run(settings::String)
+    model = if settings == ""
+                Model()
+            else
+                setModel(settings)
+            end
+    printModel(model)
+    # println("\nRunning for ", n/1_000_000, " million steps ... \n")
     state = initialState(model) 
 
-    while state.step < n
+    while state.step < model.transactionsToRun
         
         if model.verbose && state.step % model.reportInterval  == 0  
             model.report(state, model)
@@ -179,7 +185,7 @@ function initialState(model::Model)::State
     return State(0, agents)
 end
 
-function distinctRandomPair()
+function distinctRandomPair(model)
     (i,j) = rand(1:model.numberOfAgents, 2)
     while i == j
       (i,j,)= rand(1:model.numberOfAgents, 2)
@@ -565,6 +571,10 @@ function str_to_dict(str::String)
     # Split the string by commas to get the individual key-value pairs
     pairs = split(str, ", ")
 
+    if pairs == []
+        return d
+    end
+
     # Iterate through each pair and populate the dictionary
     for pair in pairs
         key, value = split(pair, " = ")
@@ -591,8 +601,9 @@ function maybe_parse_int(s::String)  # Removed the type annotation
     return parsed === nothing ? nothing_maybe() : just(parsed)
 end
 
-function setNumberOfAgents!(nAsString::String, model::Model)
-    result = maybe_parse_int(nAsString)
+function setNumberOfAgents!(n::String, model::Model)
+    println("setNumberOfAgents!: ", n)
+    result = maybe_parse_int(n)
     if isa(result, Just)
         model.numberOfAgents = result.value
     else
@@ -609,23 +620,42 @@ function setTransactionsToRun!(nAsString::String, model::Model)
     end
 end
 
+function setShowplot!(showPlotAsString::String, model::Model)
+    if showPlotAsString == "true"
+        model.showPlot = true
+    else
+        model.showPlot = false
+    end
+end
+
+
 
 # Create an empty dictionary to store functions
 function_dict = Dict{String, Function}()
 
 # Populate the dictionary with functions
-function_dict["agents"] = (model, numberOfAgentsAsString) -> setNumberOfAgents!(numberOfAgentsAsString, model)
-function_dict["transactions"] = (model, numberOfTransactionsToRun) -> setTransactionsToRun!(numberOfTransactionsToRun, model)
+function_dict["agents"] = (model, numberOfAgents) -> setNumberOfAgents!(numberOfAgents, model)
+function_dict["transactions"] = (model, transactions) -> setTransactionsToRun!(transactions, model)
+function_dict["plot"] = (model, showPlotAsString) -> setShowplot!(showPlotAsString, model)
 
 curry(f, x) = (y) -> f(x, y)
 
 function setModel(settings::String)::Model
-    dict = str_to_dict(settings)
+    println("Enter setModel")
+    println("FunctionDict", function_dict)
+    settings_dict = str_to_dict(settings)
+    println("Settings Dict", settings_dict)
     model = Model()
-    for (key, value) in dict
-        println(key, ": ", value)
-        function_dict[key](model, value)
-    end
+    for (key, value) in settings_dict
+        println("\ntrying: ", key)
+        try 
+            function_dict[key](model, value)
+        catch e
+            println("Not found: ", e)
+        end
+    end 
+    println("model.transactionsToRun: ", model.transactionsToRun)
+    printModel(model)
     return model
 end
   
@@ -659,4 +689,4 @@ model = Model(
 
 # runN(model)
 
-run(model, 1_000_000)
+# run("agents = 200, transactions = 1000")
