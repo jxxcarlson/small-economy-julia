@@ -37,6 +37,7 @@ mutable struct Model
     showEndReport::Bool
     showPlot::Bool
     verbose::Bool
+    printModel::Bool
 end
 
 
@@ -56,7 +57,8 @@ function Model(;xMax=100.0
                , reportInterval=10
                , showEndReport=false
                , showPlot=false
-               , verbose=false)
+               , verbose=false
+               , printModel=false)
     return Model(
           xMax
         , yMax
@@ -73,7 +75,8 @@ function Model(;xMax=100.0
         , reportInterval
         , showEndReport
         , showPlot
-        , verbose)
+        , verbose
+        , printModel)
 
 
 end
@@ -143,8 +146,9 @@ function run(settings::String)
             else
                 setModel(settings)
             end
-    printModel(model)
-    # println("\nRunning for ", n/1_000_000, " million steps ... \n")
+    if model.printModel
+        printModel(model)
+    end
     state = initialState(model) 
 
     while state.step < model.transactionsToRun
@@ -284,11 +288,13 @@ end
 
 
 function printModel(model)
-    println("Initial per capita balance   : ", model.initialBalance)
+    println("\nInitial per capita balance   : ", model.initialBalance)
     println("Number of agents:            : ", model.numberOfAgents)
     println("Inital per capita balance    : ", model.initialBalance)
     println("Amount of transaction        : ", model.Δm)
-    println("transactionsToRun (millions) : ", model.transactionsToRun / 1_000_000)
+    println("TransactionsToRun (millions) : ", transactionsToRunString(model))
+    println("Quantiles                    : ", model.numberOfQuantiles)
+
 
 end
 
@@ -400,7 +406,7 @@ end
 
 function transactionsToRunString(model::Model)::String
     if model.transactionsToRun < 1000
-        model.transactionsToRun
+        string(Int(model.transactionsToRun))
     elseif model.transactionsToRun < 1_000_000
         string(Int(model.transactionsToRun / 1000)) * " thousand"
     else
@@ -620,6 +626,15 @@ function setTransactionsToRun!(nAsString::String, model::Model)
     end
 end
 
+function setNumberOfQuantiles!(n::String, model::Model)
+    result = maybe_parse_int(n)
+    if isa(result, Just)
+        model.numberOfQuantiles = result.value
+    else
+        println("Bad format for numberOfQuantiles")
+    end
+end
+
 function setShowplot!(showPlotAsString::String, model::Model)
     if showPlotAsString == "true"
         model.showPlot = true
@@ -628,7 +643,13 @@ function setShowplot!(showPlotAsString::String, model::Model)
     end
 end
 
-
+function setPrintModel!(sprintModel::String, model::Model)
+    if sprintModel == "true"
+        model.printModel = true
+    else
+        model.printModel = false
+    end
+end
 
 # Create an empty dictionary to store functions
 function_dict = Dict{String, Function}()
@@ -636,26 +657,23 @@ function_dict = Dict{String, Function}()
 # Populate the dictionary with functions
 function_dict["agents"] = (model, numberOfAgents) -> setNumberOfAgents!(numberOfAgents, model)
 function_dict["transactions"] = (model, transactions) -> setTransactionsToRun!(transactions, model)
-function_dict["plot"] = (model, showPlotAsString) -> setShowplot!(showPlotAsString, model)
+function_dict["quantiles"] = (model, quantiles) -> setNumberOfQuantiles!(quantiles, model)
+function_dict["plot"] = (model, plot) -> setShowplot!(plot, model)
+function_dict["printModel"] = (model, printModel) -> setPrintModel!(printModel, model)
+
 
 curry(f, x) = (y) -> f(x, y)
 
 function setModel(settings::String)::Model
-    println("Enter setModel")
-    println("FunctionDict", function_dict)
     settings_dict = str_to_dict(settings)
-    println("Settings Dict", settings_dict)
     model = Model()
     for (key, value) in settings_dict
-        println("\ntrying: ", key)
         try 
             function_dict[key](model, value)
         catch e
             println("Not found: ", e)
         end
     end 
-    println("model.transactionsToRun: ", model.transactionsToRun)
-    printModel(model)
     return model
 end
   
